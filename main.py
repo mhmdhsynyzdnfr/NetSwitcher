@@ -281,7 +281,7 @@ def make_field(label, hint="", value="", width=400, disabled=False):
 # ۶. رابط کاربری
 # =====================================================================
 def main(page: ft.Page):
-    page.title = "NetSwitcher Pro"
+    page.title = "NetSwitcher"
     page.theme_mode = ft.ThemeMode.DARK
     page.bgcolor = COLOR_BG_DARK
     page.rtl = True
@@ -658,7 +658,7 @@ def main(page: ft.Page):
     header_app = ft.Row([
         ft.Row([
             ft.Text("⚡", size=18),
-            make_text("NetSwitcher Pro", 16, COLOR_CREAM, True),
+            make_text("NetSwitcher", 16, COLOR_CREAM, True),
         ], spacing=6),
         ft.Container(
             content=make_text("👑 ADMIN", 10, "#86efac", True),

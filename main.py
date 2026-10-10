@@ -1,9 +1,9 @@
 """
-NetSwitcher Pro - برنامه دسکتاپ تغییر سریع آی‌پی، گیت‌وی و دی‌ان‌اس با Flet
-طراحی: عمودی شبیه ماشین‌حساب ویندوز (ابعاد ۴۴۰ در ۷۶۰ پیکسل)
-ورود خودکار به عنوان Administrator در شروع برنامه
-تم پالت گرم: نارنجی، کرمی و قهوه‌ای
-سازگار با Flet قدیم (0.2x) و جدید (0.80+)
+NetSwitcher Pro - Fast IP, Gateway, and DNS switcher desktop app with Flet
+Design: Vertical (like Windows Calculator), 440x760 pixels
+Auto-admin elevation on startup
+Warm palette: Orange, Cream, and Brown
+Compatible with old Flet (0.2x) and new Flet (0.80+)
 """
 
 import sys
@@ -17,7 +17,7 @@ import socket
 import flet as ft
 
 # =====================================================================
-# ۱. پالت رنگی و فایل‌های تنظیمات
+# 1. Color Palette & Config Files
 # =====================================================================
 COLOR_BG_DARK = "#1a120c"
 COLOR_CARD = "#281a12"
@@ -32,16 +32,16 @@ CONFIG_FILE = "saved_profiles.json"
 SETTINGS_FILE = "app_settings.json"
 
 DNS_PRESETS = {
-    "shecan": {"name": "شکن (ضدتحریم)", "primary": "178.22.122.100", "secondary": "185.51.200.2"},
-    "403": {"name": "۴۰۳ آنلاین", "primary": "10.202.10.202", "secondary": "10.202.10.102"},
-    "electro": {"name": "الکترو (گیمینگ)", "primary": "78.157.42.101", "secondary": "78.157.42.100"},
+    "shecan": {"name": "Shecan", "primary": "178.22.122.100", "secondary": "185.51.200.2"},
+    "403": {"name": "403 Online", "primary": "10.202.10.202", "secondary": "10.202.10.102"},
+    "electro": {"name": "Electro (Gaming)", "primary": "78.157.42.101", "secondary": "78.157.42.100"},
     "cloudflare": {"name": "1.1.1.1", "primary": "1.1.1.1", "secondary": "1.0.0.1"},
     "google": {"name": "8.8.8.8", "primary": "8.8.8.8", "secondary": "8.8.4.4"},
 }
 
 
 # =====================================================================
-# ۲. توابع سازگاری بین نسخه‌های مختلف Flet و تنظیمات
+# 2. Compatibility & Settings Functions
 # =====================================================================
 def pad_symmetric(horizontal=0, vertical=0):
     try:
@@ -101,7 +101,7 @@ def set_setting(key, value):
         pass
 
 # =====================================================================
-# ۳. توابع سیستم‌عامل، اجرای دستورات و تشخیص هوشمند شبکه
+# 3. OS, Network & Validation Functions
 # =====================================================================
 def is_admin() -> bool:
     try:
@@ -120,7 +120,6 @@ def ensure_admin():
             pass
 
 def run_cmd(cmd: str) -> tuple:
-    """اجرای دستورات خط فرمان با پشتیبانی بهتر از کاراکترهای ویندوز"""
     try:
         res = subprocess.run(cmd, capture_output=True, shell=True)
         try:
@@ -137,12 +136,10 @@ def run_cmd(cmd: str) -> tuple:
         return False, str(e)
 
 def get_network_adapters() -> list:
-    """دریافت لیست کارت شبکه‌های فعال (روشن) با PowerShell"""
     ok, output = run_cmd('powershell -Command "(Get-NetAdapter | Where-Object {$_.Status -eq \'Up\'}).Name"')
     if ok and output.strip():
         return [line.strip() for line in output.splitlines() if line.strip()]
 
-    # روش جایگزین
     ok, output = run_cmd("netsh interface show interface")
     adapters = []
     if ok:
@@ -154,21 +151,17 @@ def get_network_adapters() -> list:
     return adapters if adapters else ["Wi-Fi", "Ethernet"]
 
 def get_active_internet_adapter(adapters: list) -> str:
-    """پیدا کردن دقیق کارت شبکه‌ای که اینترنت دارد"""
     try:
-        # پیدا کردن آی‌پی سیستم که به اینترنت وصل است
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("8.8.8.8", 80))
             active_ip = s.getsockname()[0]
 
-        # پیدا کردن نام کارت شبکه با استفاده از این آی‌پی (صد در صد دقیق)
         ok, out = run_cmd(f'powershell -Command "(Get-NetIPAddress -IPAddress \'{active_ip}\').InterfaceAlias"')
         if ok and out:
             name = out.strip().split('\n')[0].strip()
             if name in adapters:
                 return name
 
-        # پشتیبان: بررسی متنی
         for adapter in adapters:
             ok, out_ip = run_cmd(f'netsh interface ipv4 show addresses "{adapter}"')
             if ok and active_ip in out_ip:
@@ -212,7 +205,7 @@ def set_static_dns(adapter: str, dns1: str, dns2: str = "") -> tuple:
     if dns2:
         ok2, msg2 = run_cmd(f'netsh interface ip add dnsservers name="{adapter}" {dns2} index=2')
         if not ok2: return False, msg2
-    return True, "DNS ثبت شد."
+    return True, "DNS applied."
 
 def set_dhcp_dns(adapter: str) -> tuple:
     return run_cmd(f'netsh interface ip set dnsservers name="{adapter}" source=dhcp')
@@ -221,7 +214,7 @@ def flush_dns_cache():
     run_cmd("ipconfig /flushdns")
 
 # =====================================================================
-# ۴. دکمه‌های پایدار با Container
+# 4. UI Components
 # =====================================================================
 def make_btn(text: str, on_click, is_primary: bool = True, width=None, height: int = 40):
     return ft.Container(
@@ -262,13 +255,13 @@ def gateway_in_subnet(ip: str, mask: str, gateway: str) -> bool:
     except: return False
 
 # =====================================================================
-# ۵. رابط کاربری
+# 5. Main App
 # =====================================================================
 def main(page: ft.Page):
     page.title = "NetSwitcher"
     page.theme_mode = ft.ThemeMode.DARK
     page.bgcolor = COLOR_BG_DARK
-    page.rtl = True
+    page.rtl = False  # Changed to False for English layout
     page.padding = 14
     page.scroll = ft.ScrollMode.AUTO
 
@@ -289,7 +282,7 @@ def main(page: ft.Page):
             else: page.overlay.append(snack); snack.open = True; page.update()
         except: pass
 
-    # ---------------- بارگذاری داده‌ها و شبکه‌ها
+    # ---------------- Load Profiles & Adapters
     saved_profiles = []
     if os.path.exists(CONFIG_FILE):
         try:
@@ -303,21 +296,21 @@ def main(page: ft.Page):
     dropdown_opts = [DropdownOptionClass(a) for a in adapters]
 
     adapter_dropdown = ft.Dropdown(
-        label="کارت شبکه فعال", options=dropdown_opts, value=default_adapter,
+        label="Active Network Adapter", options=dropdown_opts, value=default_adapter,
         width=320, bgcolor=COLOR_CARD, border_color=COLOR_BORDER, color=COLOR_CREAM,
     )
 
-    dhcp_switch = make_switch("دریافت خودکار آی‌پی از مودم (DHCP)", True)
-    ip_input = make_field("آدرس آی‌پی (IP Address)", "192.168.1.150", disabled=True)
-    subnet_input = make_field("ساب‌نت ماسک (Subnet Mask)", value="255.255.255.0", disabled=True)
-    gateway_input = make_field("پیش‌فرض گیت‌وی (Default Gateway)", "192.168.1.1", disabled=True)
+    dhcp_switch = make_switch("Obtain IP address automatically (DHCP)", True)
+    ip_input = make_field("IP Address", "192.168.1.150", disabled=True)
+    subnet_input = make_field("Subnet Mask", value="255.255.255.0", disabled=True)
+    gateway_input = make_field("Default Gateway", "192.168.1.1", disabled=True)
 
-    dns_auto_switch = make_switch("دریافت خودکار DNS از روتر", True)
-    dns1_input = make_field("دی‌ان‌اس اول (Preferred DNS)", "178.22.122.100 یا 8.8.8.8", disabled=True)
-    dns2_input = make_field("دی‌ان‌اس دوم (Alternate DNS)", "185.51.200.2 یا 1.1.1.1", disabled=True)
+    dns_auto_switch = make_switch("Obtain DNS server address automatically", True)
+    dns1_input = make_field("Preferred DNS", "178.22.122.100 or 8.8.8.8", disabled=True)
+    dns2_input = make_field("Alternate DNS", "185.51.200.2 or 1.1.1.1", disabled=True)
 
-    new_profile_input = make_field("نام کانفیگ جدید", "یک نام دلخواه وارد کنید...", width=280)
-    status_text = ft.Text("✅ دسترسی کامل Administrator فعال است", color=COLOR_SAND, size=11)
+    new_profile_input = make_field("New Profile Name", "Enter a custom name...", width=280)
+    status_text = ft.Text("✅ Full Administrator access active", color=COLOR_SAND, size=11)
 
     def on_dhcp_toggle(e=None):
         auto = bool(dhcp_switch.value)
@@ -335,7 +328,7 @@ def main(page: ft.Page):
         name = adapter_dropdown.value
         if not name: return
         try: info = get_adapter_info(name)
-        except Exception as ex: status_text.value = f"⚠️ خطا در خواندن مشخصات: {ex}"; page.update(); return
+        except Exception as ex: status_text.value = f"⚠️ Error reading properties: {ex}"; page.update(); return
 
         dhcp_switch.value = info.get("is_dhcp", True)
         ip_input.value = info.get("ip", "")
@@ -347,7 +340,7 @@ def main(page: ft.Page):
 
         ip_input.disabled = subnet_input.disabled = gateway_input.disabled = bool(dhcp_switch.value)
         dns1_input.disabled = dns2_input.disabled = bool(dns_auto_switch.value)
-        status_text.value = f"مشخصات {name} با موفقیت بارگذاری شد."
+        status_text.value = f"Properties of {name} loaded successfully."
         page.update()
 
     if hasattr(adapter_dropdown, "on_select"): adapter_dropdown.on_select = load_current_adapter_state
@@ -361,44 +354,44 @@ def main(page: ft.Page):
         dns2_input.value = p["secondary"]
         dns1_input.disabled = dns2_input.disabled = False
         page.update()
-        notify(f"دی‌ان‌اس {p['name']} درج شد.")
+        notify(f"DNS {p['name']} inserted.")
 
     def apply_network_changes(e=None):
         adapter = adapter_dropdown.value
-        if not adapter: return notify("هیچ کارت شبکه‌ای انتخاب نشده است.", is_error=True)
+        if not adapter: return notify("No network adapter selected.", is_error=True)
 
         if not dhcp_switch.value:
-            if not valid_ip(ip_input.value): return notify("آدرس آی‌پی نامعتبر است.", is_error=True)
-            if not valid_mask(subnet_input.value): return notify("ساب‌نت ماسک نامعتبر است.", is_error=True)
-            if not valid_ip(gateway_input.value): return notify("آدرس گیت‌وی نامعتبر است.", is_error=True)
-            if not gateway_in_subnet(ip_input.value, subnet_input.value, gateway_input.value): return notify("گیت‌وی و آی‌پی باید در یک ساب‌نت باشند.", is_error=True)
+            if not valid_ip(ip_input.value): return notify("Invalid IP Address.", is_error=True)
+            if not valid_mask(subnet_input.value): return notify("Invalid Subnet Mask.", is_error=True)
+            if not valid_ip(gateway_input.value): return notify("Invalid Gateway Address.", is_error=True)
+            if not gateway_in_subnet(ip_input.value, subnet_input.value, gateway_input.value): return notify("Gateway and IP must be in the same subnet.", is_error=True)
         if not dns_auto_switch.value:
-            if not valid_ip(dns1_input.value): return notify("دی‌ان‌اس اول نامعتبر است.", is_error=True)
-            if dns2_input.value.strip() and not valid_ip(dns2_input.value): return notify("دی‌ان‌اس دوم نامعتبر است.", is_error=True)
+            if not valid_ip(dns1_input.value): return notify("Invalid Preferred DNS.", is_error=True)
+            if dns2_input.value.strip() and not valid_ip(dns2_input.value): return notify("Invalid Alternate DNS.", is_error=True)
 
-        status_text.value = "در حال اعمال تنظیمات روی کارت شبکه..."
+        status_text.value = "Applying settings to network adapter..."
         page.update()
 
         try:
             if dhcp_switch.value: ok, msg = set_dhcp_ip(adapter)
             else: ok, msg = set_static_ip(adapter, ip_input.value.strip(), subnet_input.value.strip(), gateway_input.value.strip())
-            if not ok: raise RuntimeError(msg or "خطا در تنظیم آی‌پی")
+            if not ok: raise RuntimeError(msg or "Error setting IP")
 
             if dns_auto_switch.value: ok, msg = set_dhcp_dns(adapter)
             else: ok, msg = set_static_dns(adapter, dns1_input.value.strip(), dns2_input.value.strip())
-            if not ok: raise RuntimeError(msg or "خطا در تنظیم DNS")
+            if not ok: raise RuntimeError(msg or "Error setting DNS")
 
             flush_dns_cache()
-            status_text.value = "✅ تغییرات با موفقیت ذخیره شد!"
-            notify("تنظیمات با موفقیت ثبت شدند.")
+            status_text.value = "✅ Changes saved successfully!"
+            notify("Settings applied successfully.")
         except Exception as ex:
-            status_text.value = f"⚠️ خطا: {ex}"
-            notify(f"خطا در اعمال: {ex}", is_error=True)
+            status_text.value = f"⚠️ Error: {ex}"
+            notify(f"Error applying: {ex}", is_error=True)
         page.update()
 
     def save_current_config(e=None):
         name = new_profile_input.value.strip()
-        if not name: return notify("لطفاً نام کانفیگ را وارد کنید.", is_error=True)
+        if not name: return notify("Please enter a profile name.", is_error=True)
         saved_profiles.append({
             "name": name, "dhcp": bool(dhcp_switch.value), "ip": ip_input.value.strip(),
             "mask": subnet_input.value.strip(), "gateway": gateway_input.value.strip(),
@@ -409,7 +402,7 @@ def main(page: ft.Page):
         except: pass
         new_profile_input.value = ""
         switch_tab("settings")
-        notify(f"کانفیگ «{name}» ذخیره شد.")
+        notify(f"Profile '{name}' saved.")
 
     def load_profile(prof):
         dhcp_switch.value = prof.get("dhcp", True)
@@ -422,7 +415,7 @@ def main(page: ft.Page):
         ip_input.disabled = subnet_input.disabled = gateway_input.disabled = bool(dhcp_switch.value)
         dns1_input.disabled = dns2_input.disabled = bool(dns_auto_switch.value)
         page.update()
-        notify(f"کانفیگ «{prof.get('name')}» بارگذاری شد. برای ثبت در شبکه، دکمه ذخیره را بزنید.")
+        notify(f"Profile '{prof.get('name')}' loaded. Click Save to apply to network.")
 
     def set_gateway(value):
         gateway_input.value = value
@@ -430,32 +423,32 @@ def main(page: ft.Page):
 
     def clear_cache(e=None):
         flush_dns_cache()
-        notify("کش DNS پاک شد.")
+        notify("DNS cache cleared.")
 
     def pin_current_tab(e=None):
         set_setting("pinned_tab", active_tab["name"])
-        notify("📌 تب فعلی برای شروع برنامه پین شد.")
+        notify("📌 Current tab pinned for app startup.")
 
-    # ---------------- صفحات و تب‌ها
+    # ---------------- Views & Tabs
     content_area = ft.Container(padding=pad_symmetric(vertical=10))
 
     def render_ip_view():
         return ft.Column([
-            make_text("تغییر آدرس آی‌پی (IP)", 16, COLOR_CREAM, True),
-            make_text("تنظیم دستی آی‌پی یا دریافت خودکار (DHCP)", 11, COLOR_SAND),
+            make_text("Change IP Address", 16, COLOR_CREAM, True),
+            make_text("Set IP manually or obtain automatically (DHCP)", 11, COLOR_SAND),
             ft.Divider(color=COLOR_BORDER, height=15),
             dhcp_switch, ip_input, subnet_input, ft.Container(height=8),
-            make_btn("💾 ذخیره و ثبت آدرس IP", apply_network_changes, True, width=400),
+            make_btn("💾 Save & Apply IP", apply_network_changes, True, width=400),
         ], spacing=10)
 
     def render_gateway_view():
         return ft.Column([
-            make_text("تغییر دیفالت گیت‌وی (Default Gateway)", 16, COLOR_CREAM, True),
-            make_text("تنظیم آدرس مودم یا روتر جهت اینترنت", 11, COLOR_SAND),
+            make_text("Change Default Gateway", 16, COLOR_CREAM, True),
+            make_text("Set modem or router address for internet", 11, COLOR_SAND),
             ft.Divider(color=COLOR_BORDER, height=15),
             gateway_input,
             make_card(ft.Column([
-                make_text("💡 گیت‌وی‌های متداول مودم‌ها:", 11, COLOR_CREAM_MUTED),
+                make_text("💡 Common modem gateways:", 11, COLOR_CREAM_MUTED),
                 ft.Row([
                     make_btn("192.168.1.1", lambda e: set_gateway("192.168.1.1"), False, height=32),
                     make_btn("192.168.0.1", lambda e: set_gateway("192.168.0.1"), False, height=32),
@@ -463,44 +456,44 @@ def main(page: ft.Page):
                 ], spacing=6, wrap=True),
             ], spacing=6)),
             ft.Container(height=8),
-            make_btn("💾 ذخیره و اعمال گیت‌وی", apply_network_changes, True, width=400),
+            make_btn("💾 Save & Apply Gateway", apply_network_changes, True, width=400),
         ], spacing=10)
 
     def render_dns_view():
         return ft.Column([
-            make_text("تغییر سرورهای دی‌ان‌اس (DNS)", 16, COLOR_CREAM, True),
-            make_text("تنظیم DNSهای ضدتحریم یا عمومی جهانی", 11, COLOR_SAND),
+            make_text("Change DNS Servers", 16, COLOR_CREAM, True),
+            make_text("Set Anti-Sanction or Global Public DNS", 11, COLOR_SAND),
             ft.Divider(color=COLOR_BORDER, height=15),
             dns_auto_switch,
-            make_text("پیش‌تنظیم‌های پرکاربرد (یک کلیک جهت درج):", 11, COLOR_CREAM_MUTED),
+            make_text("Popular presets (click to insert):", 11, COLOR_CREAM_MUTED),
             ft.Row([
-                make_btn("🛡️ شکن", lambda e: apply_dns_preset("shecan"), False, height=32),
-                make_btn("⚡ ۴۰۳", lambda e: apply_dns_preset("403"), False, height=32),
-                make_btn("🎮 الکترو", lambda e: apply_dns_preset("electro"), False, height=32),
+                make_btn("🛡️ Shecan", lambda e: apply_dns_preset("shecan"), False, height=32),
+                make_btn("⚡ 403", lambda e: apply_dns_preset("403"), False, height=32),
+                make_btn("🎮 Electro", lambda e: apply_dns_preset("electro"), False, height=32),
                 make_btn("🌐 1.1.1.1", lambda e: apply_dns_preset("cloudflare"), False, height=32),
                 make_btn("🔍 8.8.8.8", lambda e: apply_dns_preset("google"), False, height=32),
             ], wrap=True, spacing=6),
             dns1_input, dns2_input, ft.Container(height=8),
-            make_btn("💾 ذخیره و اعمال DNS در شبکه", apply_network_changes, True, width=400),
+            make_btn("💾 Save & Apply DNS", apply_network_changes, True, width=400),
         ], spacing=10)
 
     def render_settings_view():
-        profile_btns = [make_btn(f"📁 {p.get('name', 'پروفایل')}", (lambda x: lambda e: load_profile(x))(p), False, height=32) for p in saved_profiles]
+        profile_btns = [make_btn(f"📁 {p.get('name', 'Profile')}", (lambda x: lambda e: load_profile(x))(p), False, height=32) for p in saved_profiles]
         return ft.Column([
-            make_text("⚙️ تنظیمات و مدیریت کانفیگ‌ها", 16, COLOR_CREAM, True),
-            make_text("ذخیره تنظیمات فعلی و بارگذاری سریع پروفایل‌ها", 11, COLOR_SAND),
+            make_text("⚙️ Settings & Profiles", 16, COLOR_CREAM, True),
+            make_text("Save current settings and quickly load profiles", 11, COLOR_SAND),
             ft.Divider(color=COLOR_BORDER, height=12),
             make_card(ft.Column([
-                make_text("ذخیره تنظیمات کارت به عنوان کانفیگ:", 12, COLOR_CREAM, True),
-                ft.Row([new_profile_input, make_btn("💾 ذخیره", save_current_config, True, height=40)], spacing=6),
+                make_text("Save adapter settings as profile:", 12, COLOR_CREAM, True),
+                ft.Row([new_profile_input, make_btn("💾 Save", save_current_config, True, height=40)], spacing=6),
             ], spacing=6)),
             make_card(ft.Column([
-                make_text("پروفایل‌های ذخیره‌شده (کلیک برای لود):", 12, COLOR_CREAM, True),
-                ft.Row(profile_btns, wrap=True, spacing=6) if profile_btns else make_text("هیچ کانفیگی ذخیره نشده است", 10, COLOR_SAND),
+                make_text("Saved Profiles (Click to load):", 12, COLOR_CREAM, True),
+                ft.Row(profile_btns, wrap=True, spacing=6) if profile_btns else make_text("No profiles saved", 10, COLOR_SAND),
             ], spacing=6)),
             make_card(ft.Row([
-                make_text("پاکسازی کش DNS (flushdns):", 11, COLOR_CREAM),
-                make_btn("🧹 پاکسازی", clear_cache, False, height=32),
+                make_text("Clear DNS Cache (flushdns):", 11, COLOR_CREAM),
+                make_btn("🧹 Clear", clear_cache, False, height=32),
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)),
         ], spacing=10)
 
@@ -525,10 +518,10 @@ def main(page: ft.Page):
             on_click=lambda e: switch_tab(name),
         )
 
-    btn_tab_ip = make_tab("🌐 آی‌پی", "ip")
-    btn_tab_gateway = make_tab("🚪 گیت‌وی", "gateway")
-    btn_tab_dns = make_tab("🛡️ دی‌ان‌اس", "dns")
-    btn_tab_settings = make_tab("⚙️ کانفیگ", "settings")
+    btn_tab_ip = make_tab("🌐 IP", "ip")
+    btn_tab_gateway = make_tab("🚪 Gateway", "gateway")
+    btn_tab_dns = make_tab("🛡️ DNS", "dns")
+    btn_tab_settings = make_tab("⚙️ Config", "settings")
     btn_pin = make_btn("📌", pin_current_tab, False, width=40, height=35)
 
     header_app = ft.Row([
@@ -554,14 +547,13 @@ def main(page: ft.Page):
         ], spacing=6)
     )
 
-    # خواندن تب پین شده و باز کردن آن
+    # Load pinned tab and start
     start_tab = get_setting("pinned_tab", "ip")
     switch_tab(start_tab)
     load_current_adapter_state()
 
-
 # =====================================================================
-# ۶. نقطه ورود
+# 6. Entry Point
 # =====================================================================
 if __name__ == "__main__":
     ensure_admin()

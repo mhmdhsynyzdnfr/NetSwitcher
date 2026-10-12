@@ -1,4 +1,4 @@
-# 🌐 NetSwitcher Pro
+# 🌐 NetSwitcher 
 
 A fast, lightweight, and native-feeling Windows desktop utility to seamlessly switch your IP addresses, Default Gateways, and DNS servers. Built with Python and [Flet](https://flet.dev/).
 
@@ -32,7 +32,7 @@ The project is modularized for better maintainability:
 **Option 1: Using `uv` (Recommended for speed)**
 ```bash
 # Clone the repository
-git clone [https://github.com/YourUsername/NetSwitcher.git](https://github.com/YourUsername/NetSwitcher.git)
+git clone https://github.com/mhmdhsynyzdnfr/NetSwitcher.git
 cd NetSwitcher
 
 # Run directly (uv will handle dependencies automatically)

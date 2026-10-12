@@ -1,20 +1,20 @@
 """
 NetSwitcher Pro - Fast IP, Gateway, and DNS switcher desktop app with Flet
 Design: Vertical (like Windows Calculator), 440x760 pixels
-Auto-admin elevation on startup
 Warm palette: Orange, Cream, and Brown
-Compatible with old Flet (0.2x) and new Flet (0.80+)
 """
 
-import sys
-import os
-import ctypes
-import subprocess
-import re
-import ipaddress
 import json
-import socket
+import os
 import flet as ft
+
+# وارد کردن ماژول‌های پروژه
+from network_manager import (
+    get_network_adapters, get_active_internet_adapter, get_adapter_info,
+    set_static_ip, set_dhcp_ip, set_static_dns, set_dhcp_dns, flush_dns_cache
+)
+from admin_helper import ensure_admin
+from presets import DNS_PRESETS
 
 # =====================================================================
 # 1. Color Palette & Config Files
@@ -23,7 +23,6 @@ COLOR_BG_DARK = "#1a120c"
 COLOR_CARD = "#281a12"
 COLOR_BORDER = "#483122"
 COLOR_ORANGE = "#ea580c"
-COLOR_ORANGE_HOVER = "#f97316"
 COLOR_CREAM = "#fef3c7"
 COLOR_CREAM_MUTED = "#fed7aa"
 COLOR_SAND = "#d8c2ad"
@@ -31,18 +30,28 @@ COLOR_SAND = "#d8c2ad"
 CONFIG_FILE = "saved_profiles.json"
 SETTINGS_FILE = "app_settings.json"
 
-DNS_PRESETS = {
-    "shecan": {"name": "Shecan", "primary": "178.22.122.100", "secondary": "185.51.200.2"},
-    "403": {"name": "403 Online", "primary": "10.202.10.202", "secondary": "10.202.10.102"},
-    "electro": {"name": "Electro (Gaming)", "primary": "78.157.42.101", "secondary": "78.157.42.100"},
-    "cloudflare": {"name": "1.1.1.1", "primary": "1.1.1.1", "secondary": "1.0.0.1"},
-    "google": {"name": "8.8.8.8", "primary": "8.8.8.8", "secondary": "8.8.4.4"},
-}
-
-
 # =====================================================================
-# 2. Compatibility & Settings Functions
+# 2. Settings & Compatibility Functions
 # =====================================================================
+def get_setting(key, default):
+    try:
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f).get(key, default)
+    except Exception:
+        return default
+
+def set_setting(key, value):
+    try:
+        data = {}
+        if os.path.exists(SETTINGS_FILE):
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        data[key] = value
+        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+    except Exception:
+        pass
+
 def pad_symmetric(horizontal=0, vertical=0):
     try:
         return ft.Padding.symmetric(vertical=vertical, horizontal=horizontal)
@@ -65,162 +74,12 @@ def align_center():
     except Exception:
         return ft.alignment.center
 
-def make_switch(label: str, value: bool = True):
-    try:
-        return ft.Switch(label=label, value=value, active_color=COLOR_ORANGE)
-    except TypeError:
-        return ft.Switch(label=label, value=value)
-
-def make_text(text, size=12, color=None, bold=False, align=None):
-    kwargs = {"size": size}
-    if color:
-        kwargs["color"] = color
-    if bold:
-        kwargs["weight"] = ft.FontWeight.BOLD
-    if align is not None:
-        kwargs["text_align"] = align
-    return ft.Text(text, **kwargs)
-
-def get_setting(key, default):
-    try:
-        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f).get(key, default)
-    except Exception:
-        return default
-
-def set_setting(key, value):
-    try:
-        data = {}
-        if os.path.exists(SETTINGS_FILE):
-            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        data[key] = value
-        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False)
-    except Exception:
-        pass
-
 # =====================================================================
-# 3. OS, Network & Validation Functions
-# =====================================================================
-def is_admin() -> bool:
-    try:
-        return ctypes.windll.shell32.IsUserAnAdmin() != 0
-    except Exception:
-        return False
-
-def ensure_admin():
-    if not is_admin():
-        script = os.path.abspath(sys.argv[0])
-        params = " ".join([f'"{arg}"' for arg in sys.argv[1:]])
-        try:
-            ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, f'"{script}" {params}', None, 1)
-            if ret > 32: sys.exit(0)
-        except Exception:
-            pass
-
-def run_cmd(cmd: str) -> tuple:
-    try:
-        res = subprocess.run(cmd, capture_output=True, shell=True)
-        try:
-            out = res.stdout.decode('utf-8')
-            err = res.stderr.decode('utf-8')
-        except UnicodeDecodeError:
-            out = res.stdout.decode('cp1256', errors='replace')
-            err = res.stderr.decode('cp1256', errors='replace')
-
-        if res.returncode == 0:
-            return True, out.strip()
-        return False, err.strip() or out.strip()
-    except Exception as e:
-        return False, str(e)
-
-def get_network_adapters() -> list:
-    ok, output = run_cmd('powershell -Command "(Get-NetAdapter | Where-Object {$_.Status -eq \'Up\'}).Name"')
-    if ok and output.strip():
-        return [line.strip() for line in output.splitlines() if line.strip()]
-
-    ok, output = run_cmd("netsh interface show interface")
-    adapters = []
-    if ok:
-        for line in output.splitlines():
-            if "Enabled" in line or "Connected" in line:
-                parts = re.split(r"\s{2,}", line.strip())
-                if len(parts) >= 4:
-                    adapters.append(parts[3].strip())
-    return adapters if adapters else ["Wi-Fi", "Ethernet"]
-
-def get_active_internet_adapter(adapters: list) -> str:
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.connect(("8.8.8.8", 80))
-            active_ip = s.getsockname()[0]
-
-        ok, out = run_cmd(f'powershell -Command "(Get-NetIPAddress -IPAddress \'{active_ip}\').InterfaceAlias"')
-        if ok and out:
-            name = out.strip().split('\n')[0].strip()
-            if name in adapters:
-                return name
-
-        for adapter in adapters:
-            ok, out_ip = run_cmd(f'netsh interface ipv4 show addresses "{adapter}"')
-            if ok and active_ip in out_ip:
-                return adapter
-    except Exception:
-        pass
-
-    return adapters[0] if adapters else "Wi-Fi"
-
-def get_adapter_info(adapter_name: str) -> dict:
-    info = {"is_dhcp": True, "ip": "", "mask": "255.255.255.0", "gateway": "", "dns1": "", "dns2": ""}
-    ok_ip, out_ip = run_cmd(f'netsh interface ipv4 show addresses "{adapter_name}"')
-    if ok_ip:
-        dhcp_match = re.search(r"DHCP.*?(Yes|No)", out_ip, re.IGNORECASE)
-        if dhcp_match: info["is_dhcp"] = dhcp_match.group(1).lower() == "yes"
-        ip_match = re.search(r"(?:IP|IPv4).*?:\s*([\d\.]+)", out_ip, re.IGNORECASE)
-        if ip_match: info["ip"] = ip_match.group(1)
-        mask_match = re.search(r"mask\s+([\d\.]+)\)", out_ip, re.IGNORECASE)
-        if mask_match: info["mask"] = mask_match.group(1)
-        gw_match = re.search(r"Gateway.*?:\s+([\d\.]+)", out_ip, re.IGNORECASE)
-        if gw_match: info["gateway"] = gw_match.group(1)
-
-    ok_dns, out_dns = run_cmd(f'netsh interface ipv4 show dnsservers "{adapter_name}"')
-    if ok_dns:
-        dns_matches = re.findall(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", out_dns)
-        if len(dns_matches) >= 1: info["dns1"] = dns_matches[0]
-        if len(dns_matches) >= 2: info["dns2"] = dns_matches[1]
-
-    return info
-
-def set_static_ip(adapter: str, ip: str, mask: str, gateway: str) -> tuple:
-    cmd = f'netsh interface ip set address name="{adapter}" static {ip} {mask} {gateway} 1'
-    return run_cmd(cmd)
-
-def set_dhcp_ip(adapter: str) -> tuple:
-    return run_cmd(f'netsh interface ip set address name="{adapter}" source=dhcp')
-
-def set_static_dns(adapter: str, dns1: str, dns2: str = "") -> tuple:
-    ok1, msg1 = run_cmd(f'netsh interface ip set dnsservers name="{adapter}" static {dns1} primary')
-    if not ok1: return False, msg1
-    if dns2:
-        ok2, msg2 = run_cmd(f'netsh interface ip add dnsservers name="{adapter}" {dns2} index=2')
-        if not ok2: return False, msg2
-    return True, "DNS applied."
-
-def set_dhcp_dns(adapter: str) -> tuple:
-    return run_cmd(f'netsh interface ip set dnsservers name="{adapter}" source=dhcp')
-
-def flush_dns_cache():
-    run_cmd("ipconfig /flushdns")
-
-# =====================================================================
-# 4. UI Components
+# 3. UI Components Helpers
 # =====================================================================
 def make_btn(text: str, on_click, is_primary: bool = True, width=None, height: int = 40):
     return ft.Container(
-        content=make_text(
-            text, size=12, color="white" if is_primary else COLOR_CREAM, bold=True, align=ft.TextAlign.CENTER
-        ),
+        content=ft.Text(text, size=12, color="white" if is_primary else COLOR_CREAM, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
         bgcolor=COLOR_ORANGE if is_primary else COLOR_CARD,
         border=None if is_primary else border_all(1, COLOR_BORDER),
         border_radius=8,
@@ -229,39 +88,20 @@ def make_btn(text: str, on_click, is_primary: bool = True, width=None, height: i
     )
 
 def make_card(content):
-    return ft.Container(
-        bgcolor=COLOR_CARD, padding=10, border_radius=8, border=border_all(1, COLOR_BORDER), content=content
-    )
+    return ft.Container(bgcolor=COLOR_CARD, padding=10, border_radius=8, border=border_all(1, COLOR_BORDER), content=content)
 
 def make_field(label, hint="", value="", width=400, disabled=False):
-    return ft.TextField(
-        label=label, hint_text=hint, value=value, disabled=disabled, width=width,
-        text_align=ft.TextAlign.LEFT, bgcolor=COLOR_CARD, border_color=COLOR_BORDER, color=COLOR_CREAM,
-    )
+    return ft.TextField(label=label, hint_text=hint, value=value, disabled=disabled, width=width, text_align=ft.TextAlign.LEFT, bgcolor=COLOR_CARD, border_color=COLOR_BORDER, color=COLOR_CREAM)
 
-def valid_ip(value: str) -> bool:
-    try: ipaddress.IPv4Address(value.strip()); return True
-    except: return False
-
-def valid_mask(value: str) -> bool:
-    if not valid_ip(value): return False
-    bits = bin(int(ipaddress.IPv4Address(value.strip())))[2:].zfill(32)
-    return "01" not in bits and bits != "0" * 32
-
-def gateway_in_subnet(ip: str, mask: str, gateway: str) -> bool:
-    try:
-        network = ipaddress.IPv4Interface(f"{ip.strip()}/{mask.strip()}").network
-        return ipaddress.IPv4Address(gateway.strip()) in network
-    except: return False
 
 # =====================================================================
-# 5. Main App
+# 4. Main App
 # =====================================================================
 def main(page: ft.Page):
     page.title = "NetSwitcher"
     page.theme_mode = ft.ThemeMode.DARK
     page.bgcolor = COLOR_BG_DARK
-    page.rtl = False  # Changed to False for English layout
+    page.rtl = False
     page.padding = 14
     page.scroll = ft.ScrollMode.AUTO
 
@@ -282,7 +122,6 @@ def main(page: ft.Page):
             else: page.overlay.append(snack); snack.open = True; page.update()
         except: pass
 
-    # ---------------- Load Profiles & Adapters
     saved_profiles = []
     if os.path.exists(CONFIG_FILE):
         try:
@@ -300,12 +139,12 @@ def main(page: ft.Page):
         width=320, bgcolor=COLOR_CARD, border_color=COLOR_BORDER, color=COLOR_CREAM,
     )
 
-    dhcp_switch = make_switch("Obtain IP address automatically (DHCP)", True)
+    dhcp_switch = ft.Switch(label="Obtain IP address automatically (DHCP)", value=True, active_color=COLOR_ORANGE)
     ip_input = make_field("IP Address", "192.168.1.150", disabled=True)
     subnet_input = make_field("Subnet Mask", value="255.255.255.0", disabled=True)
     gateway_input = make_field("Default Gateway", "192.168.1.1", disabled=True)
 
-    dns_auto_switch = make_switch("Obtain DNS server address automatically", True)
+    dns_auto_switch = ft.Switch(label="Obtain DNS server address automatically", value=True, active_color=COLOR_ORANGE)
     dns1_input = make_field("Preferred DNS", "178.22.122.100 or 8.8.8.8", disabled=True)
     dns2_input = make_field("Alternate DNS", "185.51.200.2 or 1.1.1.1", disabled=True)
 
@@ -343,8 +182,10 @@ def main(page: ft.Page):
         status_text.value = f"Properties of {name} loaded successfully."
         page.update()
 
-    if hasattr(adapter_dropdown, "on_select"): adapter_dropdown.on_select = load_current_adapter_state
-    else: adapter_dropdown.on_change = load_current_adapter_state
+    if hasattr(adapter_dropdown, "on_select"):
+        adapter_dropdown.on_select = load_current_adapter_state
+    else:
+        adapter_dropdown.on_change = load_current_adapter_state
 
     def apply_dns_preset(preset_key):
         p = DNS_PRESETS.get(preset_key)
@@ -359,15 +200,6 @@ def main(page: ft.Page):
     def apply_network_changes(e=None):
         adapter = adapter_dropdown.value
         if not adapter: return notify("No network adapter selected.", is_error=True)
-
-        if not dhcp_switch.value:
-            if not valid_ip(ip_input.value): return notify("Invalid IP Address.", is_error=True)
-            if not valid_mask(subnet_input.value): return notify("Invalid Subnet Mask.", is_error=True)
-            if not valid_ip(gateway_input.value): return notify("Invalid Gateway Address.", is_error=True)
-            if not gateway_in_subnet(ip_input.value, subnet_input.value, gateway_input.value): return notify("Gateway and IP must be in the same subnet.", is_error=True)
-        if not dns_auto_switch.value:
-            if not valid_ip(dns1_input.value): return notify("Invalid Preferred DNS.", is_error=True)
-            if dns2_input.value.strip() and not valid_ip(dns2_input.value): return notify("Invalid Alternate DNS.", is_error=True)
 
         status_text.value = "Applying settings to network adapter..."
         page.update()
@@ -384,6 +216,7 @@ def main(page: ft.Page):
             flush_dns_cache()
             status_text.value = "✅ Changes saved successfully!"
             notify("Settings applied successfully.")
+            load_current_adapter_state()
         except Exception as ex:
             status_text.value = f"⚠️ Error: {ex}"
             notify(f"Error applying: {ex}", is_error=True)
@@ -434,8 +267,8 @@ def main(page: ft.Page):
 
     def render_ip_view():
         return ft.Column([
-            make_text("Change IP Address", 16, COLOR_CREAM, True),
-            make_text("Set IP manually or obtain automatically (DHCP)", 11, COLOR_SAND),
+            ft.Text("Change IP Address", size=16, color=COLOR_CREAM, weight=ft.FontWeight.BOLD),
+            ft.Text("Set IP manually or obtain automatically (DHCP)", size=11, color=COLOR_SAND),
             ft.Divider(color=COLOR_BORDER, height=15),
             dhcp_switch, ip_input, subnet_input, ft.Container(height=8),
             make_btn("💾 Save & Apply IP", apply_network_changes, True, width=400),
@@ -443,12 +276,12 @@ def main(page: ft.Page):
 
     def render_gateway_view():
         return ft.Column([
-            make_text("Change Default Gateway", 16, COLOR_CREAM, True),
-            make_text("Set modem or router address for internet", 11, COLOR_SAND),
+            ft.Text("Change Default Gateway", size=16, color=COLOR_CREAM, weight=ft.FontWeight.BOLD),
+            ft.Text("Set modem or router address for internet", size=11, color=COLOR_SAND),
             ft.Divider(color=COLOR_BORDER, height=15),
             gateway_input,
             make_card(ft.Column([
-                make_text("💡 Common modem gateways:", 11, COLOR_CREAM_MUTED),
+                ft.Text("💡 Common modem gateways:", size=11, color=COLOR_CREAM_MUTED),
                 ft.Row([
                     make_btn("192.168.1.1", lambda e: set_gateway("192.168.1.1"), False, height=32),
                     make_btn("192.168.0.1", lambda e: set_gateway("192.168.0.1"), False, height=32),
@@ -461,11 +294,11 @@ def main(page: ft.Page):
 
     def render_dns_view():
         return ft.Column([
-            make_text("Change DNS Servers", 16, COLOR_CREAM, True),
-            make_text("Set Anti-Sanction or Global Public DNS", 11, COLOR_SAND),
+            ft.Text("Change DNS Servers", size=16, color=COLOR_CREAM, weight=ft.FontWeight.BOLD),
+            ft.Text("Set Anti-Sanction or Global Public DNS", size=11, color=COLOR_SAND),
             ft.Divider(color=COLOR_BORDER, height=15),
             dns_auto_switch,
-            make_text("Popular presets (click to insert):", 11, COLOR_CREAM_MUTED),
+            ft.Text("Popular presets (click to insert):", size=11, color=COLOR_CREAM_MUTED),
             ft.Row([
                 make_btn("🛡️ Shecan", lambda e: apply_dns_preset("shecan"), False, height=32),
                 make_btn("⚡ 403", lambda e: apply_dns_preset("403"), False, height=32),
@@ -480,19 +313,19 @@ def main(page: ft.Page):
     def render_settings_view():
         profile_btns = [make_btn(f"📁 {p.get('name', 'Profile')}", (lambda x: lambda e: load_profile(x))(p), False, height=32) for p in saved_profiles]
         return ft.Column([
-            make_text("⚙️ Settings & Profiles", 16, COLOR_CREAM, True),
-            make_text("Save current settings and quickly load profiles", 11, COLOR_SAND),
+            ft.Text("⚙️ Settings & Profiles", size=16, color=COLOR_CREAM, weight=ft.FontWeight.BOLD),
+            ft.Text("Save current settings and quickly load profiles", size=11, color=COLOR_SAND),
             ft.Divider(color=COLOR_BORDER, height=12),
             make_card(ft.Column([
-                make_text("Save adapter settings as profile:", 12, COLOR_CREAM, True),
+                ft.Text("Save adapter settings as profile:", size=12, color=COLOR_CREAM, weight=ft.FontWeight.BOLD),
                 ft.Row([new_profile_input, make_btn("💾 Save", save_current_config, True, height=40)], spacing=6),
             ], spacing=6)),
             make_card(ft.Column([
-                make_text("Saved Profiles (Click to load):", 12, COLOR_CREAM, True),
-                ft.Row(profile_btns, wrap=True, spacing=6) if profile_btns else make_text("No profiles saved", 10, COLOR_SAND),
+                ft.Text("Saved Profiles (Click to load):", size=12, color=COLOR_CREAM, weight=ft.FontWeight.BOLD),
+                ft.Row(profile_btns, wrap=True, spacing=6) if profile_btns else ft.Text("No profiles saved", size=10, color=COLOR_SAND),
             ], spacing=6)),
             make_card(ft.Row([
-                make_text("Clear DNS Cache (flushdns):", 11, COLOR_CREAM),
+                ft.Text("Clear DNS Cache (flushdns):", size=11, color=COLOR_CREAM),
                 make_btn("🧹 Clear", clear_cache, False, height=32),
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)),
         ], spacing=10)
@@ -512,22 +345,20 @@ def main(page: ft.Page):
 
     def make_tab(label, name):
         return ft.Container(
-            content=make_text(label, 12, COLOR_SAND, True, ft.TextAlign.CENTER),
-            padding=pad_symmetric(horizontal=10, vertical=8),
-            border_radius=8, expand=True, alignment=align_center(),
-            on_click=lambda e: switch_tab(name),
+            content=ft.Text(label, size=10, color=COLOR_SAND, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER, no_wrap=True),
+            height=40, border_radius=8, expand=True, alignment=align_center(), on_click=lambda e: switch_tab(name),
         )
 
     btn_tab_ip = make_tab("🌐 IP", "ip")
     btn_tab_gateway = make_tab("🚪 Gateway", "gateway")
     btn_tab_dns = make_tab("🛡️ DNS", "dns")
     btn_tab_settings = make_tab("⚙️ Config", "settings")
-    btn_pin = make_btn("📌", pin_current_tab, False, width=40, height=35)
+    btn_pin = make_btn("📌", pin_current_tab, False, width=40, height=40)
 
     header_app = ft.Row([
-        ft.Row([ft.Text("⚡", size=18), make_text("NetSwitcher", 16, COLOR_CREAM, True)], spacing=6),
+        ft.Row([ft.Text("⚡", size=18), ft.Text("NetSwitcher", size=16, color=COLOR_CREAM, weight=ft.FontWeight.BOLD)], spacing=6),
         ft.Container(
-            content=make_text("👑 ADMIN", 10, "#86efac", True),
+            content=ft.Text("👑 ADMIN", size=10, color="#86efac", weight=ft.FontWeight.BOLD),
             bgcolor="#14532d", padding=pad_symmetric(horizontal=8, vertical=4), border_radius=6,
         ),
     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
@@ -547,15 +378,13 @@ def main(page: ft.Page):
         ], spacing=6)
     )
 
-    # Load pinned tab and start
     start_tab = get_setting("pinned_tab", "ip")
     switch_tab(start_tab)
     load_current_adapter_state()
 
-# =====================================================================
-# 6. Entry Point
-# =====================================================================
 if __name__ == "__main__":
     ensure_admin()
-    if hasattr(ft, "run"): ft.run(main)
-    else: ft.app(target=main)
+    if hasattr(ft, "run"):
+        ft.run(main)
+    else:
+        ft.app(target=main)

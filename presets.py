@@ -34,27 +34,3 @@ DNS_PRESETS = {
         "desc": "شناخته‌شده‌ترین و پایدارترین سرور نام دامنه"
     }
 }
-
-DEFAULT_PROFILES = {
-    "home_auto": {
-        "title": "مودم خانه (DHCP خودکار)",
-        "dhcp": True,
-        "dns_auto": True
-    },
-    "work_static": {
-        "title": "شبکه اداری (آی‌پی استاتیک)",
-        "dhcp": False,
-        "ip": "192.168.1.150",
-        "mask": "255.255.255.0",
-        "gateway": "192.168.1.1",
-        "dns1": "8.8.8.8",
-        "dns2": "1.1.1.1"
-    },
-    "dev_shecan": {
-        "title": "پروفایل شکن (ضد تحریم)",
-        "dhcp": True,
-        "dns_auto": False,
-        "dns1": "178.22.122.100",
-        "dns2": "185.51.200.2"
-    }
-}

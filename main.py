@@ -1,5 +1,5 @@
 """
-NetSwitcher Pro - Fast IP, Gateway, and DNS switcher desktop app with Flet
+NetSwitcher - Fast IP, Gateway, and DNS switcher desktop app with Flet
 Design: Vertical (like Windows Calculator), 440x760 pixels
 Warm palette: Orange, Cream, and Brown
 """

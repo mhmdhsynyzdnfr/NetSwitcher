@@ -2,7 +2,7 @@
  
 A fast, lightweight, and native-feeling Windows desktop utility to seamlessly switch your IP addresses, Default Gateways, and DNS servers. Built with Python and [Flet](https://flet.dev/).
 
-If you frequently move between different networks (e.g., Home, Office, Gaming) or need to bypass geo-restrictions using custom DNS servers, NetSwitcher Pro allows you to save those configurations as profiles and apply them with a single click.
+If you frequently move between different networks (e.g., Home, Office, Gaming) or need to bypass geo-restrictions using custom DNS servers, NetSwitcher allows you to save those configurations as profiles and apply them with a single click.
 
 ## ✨ Features
 

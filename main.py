@@ -99,6 +99,7 @@ def make_field(label, hint="", value="", width=400, disabled=False):
 # =====================================================================
 def main(page: ft.Page):
     page.title = "NetSwitcher"
+    page.window.icon = "icon.png"
     page.theme_mode = ft.ThemeMode.DARK
     page.bgcolor = COLOR_BG_DARK
     page.rtl = False
@@ -385,6 +386,6 @@ def main(page: ft.Page):
 if __name__ == "__main__":
     ensure_admin()
     if hasattr(ft, "run"):
-        ft.run(main)
+        ft.run(main, assets_dir="assets")
     else:
-        ft.app(target=main)
+        ft.app(target=main, assets_dir="assets")

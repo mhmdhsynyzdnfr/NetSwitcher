@@ -1,0 +1,12 @@
+[project]
+name = "netswitcher-pro"
+version = "1.0.0"
+description = "Fast Windows network configuration switcher (IP, Gateway, and DNS) built with Flet."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "flet>=0.23.0"
+]
+
+[tool.flet.app]
+path = "."
